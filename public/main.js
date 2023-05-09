@@ -22,25 +22,57 @@ function playVideo(videoId) {
 
 // Function to read an NFC card
 async function readNfc() {
-  try {
-    const reader = new NDEFReader();
-    await reader.scan();
-    console.log("> Scan started");
-
-    reader.onreading = ({ message, serialNumber }) => {
-      console.log(`> Serial number: ${serialNumber}`);
-      console.log(`> Records of type: "${message.records[0].recordType}"`);
-      console.log(`> Data: "${message.records[0].data}"`);
-      return message.records[0].data;
-    };
-
-  } catch (error) {
-    console.log("Argh! " + error);
+  // Check if the Web NFC API is available
+  if (typeof NDEFReader === "undefined") {
+    throw new Error("Web NFC is not supported in this browser.");
   }
+
+  return new Promise((resolve, reject) => {
+    try {
+      const ndef = new NDEFReader();
+
+      // Request permission to use NFC
+      ndef.scan().then(() => {
+        console.log("Scan started successfully.");
+        ndef.onreadingerror = () => {
+          console.log("Cannot read data from the NFC tag. Try another one?");
+          reject("Cannot read data from the NFC tag. Try another one?");
+        };
+        ndef.onreading = ({ message }) => {
+          for (const record of message.records) {
+            if (record.recordType === "text") {
+              // Decode the text record
+              const textDecoder = new TextDecoder();
+              const id = textDecoder.decode(record.data);
+              console.log("ID read from NFC card: " + id);
+              resolve(id);
+            }
+          }
+        };
+      }).catch(error => {
+        console.log(`Error! Scan failed to start: ${error}.`);
+        reject(error);
+      });
+    } catch (error) {
+      console.log(`Error! Scan failed to start: ${error}.`);
+      if (error.name === "NotAllowedError") {
+        // The user denied the permission request
+        console.log("Permission to access NFC was denied.");
+      } else if (error.name === "NotReadableError") {
+        // The NFC tag could not be read
+        console.log("The NFC tag could not be read.");
+      } else {
+        // Some other error occurred
+        console.log("An unexpected error occurred.");
+      }
+      reject(error);
+    }
+  });
 }
 
 document.getElementById('readNfc').addEventListener('click', async function() {
   try {
+    console.log(`first`)
     // Read the NFC card
     const nfcId = await readNfc();
 
